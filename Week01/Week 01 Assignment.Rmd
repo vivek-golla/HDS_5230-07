@@ -19,6 +19,7 @@ You can either submit the .R or .Rmd files or you can submit the link to the fil
 library(data.table)
 library(purrr)
 library(testthat)
+library(ggplot2)
 ```
 
 ```{r}
@@ -126,7 +127,6 @@ test_that("men more likely to die", { expect_equal(menMoreLikely, TRUE)})
 ## 2. Combine Outputpatient with Disease on ICD10 code
 
 ##First I am going to go from wide to long so I can effectively merge the ICD10 Codes with one merge step
-## diseasemap.dt[Condition %in% c("Diabetes_without_complications","Peptic_ulcer_disease")]
 outpatient.long <- melt(outpatient.visit.dt[,.(PatientID,ICD10_1,ICD10_2,ICD10_3)], id.vars='PatientID',value.name='ICD10')
 
 ##Then I will merge with diseasemap to get the Condition names
@@ -141,27 +141,33 @@ out.disease.patient <- merge(outpatient.disease.mapped[,.(PatientID,Condition)],
 
 
 #First I get count information for Males and Females by condition
-summary.gender.dt <- out.disease.patient[!(Gender %in% c("MISSING", "")),.(count=as.numeric(.(.N))),by=c("Condition","Gender")]
+summary.gender.dt <- out.disease.patient[(Gender %in% c("male","female")),.(count=as.numeric(.(.N))),by=c("Condition","Gender")]
 
-#Then I get count information for All patients combined, by condition
-summary.all.dt <- out.disease.patient[!(Gender %in% c("MISSING", "")),.(Gender="all",count=as.numeric(.(.N))),by=Condition]
+#Then I get count information for both male and females combined, by condition
+summary.all.dt <- out.disease.patient[(Gender %in% c("male", "female")),.(Gender="all",count=as.numeric(.(.N))),by=Condition]
 
 #Concatenate both data tables together
 summary.concat.dt <- rbind(summary.all.dt, summary.gender.dt)
 #Calculate percentage of each by condition
-summary.pct.dt <- summary.concat.dt[,list(Gender, pct=2*100*count/sum(count)),by=Condition]
+summary.pct.dt <- summary.concat.dt[,list(Condition, pct=paste(as.character(100*count/sum(count)),"%")),by=Gender]
 #Convert from long to wide, to get Men, Women, All columns
 summary.dt <- dcast(summary.pct.dt, formula= Condition ~ Gender, value.var='pct')
 #renaming column names
 summaries.dt <- summary.dt[,.(Condition,Men=male,Women=female,All=all)]
+summaries.dt
 ```
+
 
 ```{r}
 
-summaries.dt
+summaries.long<-melt(summaries.dt,id.vars="Condition")
+data1 = summaries.long[Condition %in% c("Alcohol", "Cancer", "Congestive_heart_failure")]
+
+ggplot(data1, aes(fill=variable, y=value, x=Condition)) + 
+    geom_bar(position="dodge", stat="identity")
 
 ```
-Observing the disease groups, and the percentage of either Men or Women experiencing the respective diseases, we see a few patterns. There is generally a higher percentage of women for each disease group, with a few exceptions, for example Congestive Heart Failure, where men are 51.8% and women are 48.1%. This could be attributed to the difference in number of men and women in the data.
+Observing the disease groups, and the percentage of either Men or Women experiencing the respective diseases, we see a few patterns. For example, from the visualization we can see that the rate of congestive heart failure is much greater in Men than in Women.
 
 ```{r}
 test_that("summaries populated", { expect_equal(summaries.dt [,.N],22)})
@@ -217,16 +223,21 @@ test_that("2013 is correct", { expect_equal(get_mortality_rate(2013), 1.638896)}
 ```
 
 ```{r}
-#using a for loop to get all mortality rates from 2008-2005
+#using a for loop to get all mortality rates from 2008-2015
 mortality.rates.dt = data.table(year=integer(), rate=numeric())
 for (i in seq(from=2008, to=2015)){
   mortality_rate<- get_mortality_rate(i)
-  temp.dt <- data.table(year=i,rate=mortality_rate)
+  temp.dt <- data.table(year=i, rate=mortality_rate)
   mortality.rates.dt <- rbind(mortality.rates.dt, temp.dt)
+  
 }
 mortality.rates.dt
+```
+
+
+
+```{r}
 #now I am using ggplot2 to make a line graph to represent the trend
-library(ggplot2)
 ggplot(data=mortality.rates.dt, aes(x=year, y=rate)) +
   geom_line(color="red")+
   geom_point()
