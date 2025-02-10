@@ -1,0 +1,68 @@
+---
+title: "Week03Assignment"
+output: html_document
+date: "2025-02-09"
+Author: "Vivek Golla"
+---
+
+```{r}
+#using pracma library for haversine function
+library(pracma)
+library(data.table)
+library(dplyr)
+library(foreach)
+library(doParallel)
+```
+
+```{r}
+cl <- makeCluster(3)
+registerDoParallel(cl, cores=16)
+stopImplicitCluster()
+
+```
+
+
+```{r}
+df <- read.csv("clinics.csv", sep="|")
+print(head(df))
+```
+
+
+```{r}
+#simple for loop approach
+haversine_series = c()
+loc1 <- c(40.671, -73.985)
+start_time = Sys.time()
+for (i in seq_len(nrow(df))){
+  loc2 <- c(df$locLat[i], df$locLong[i])
+  haversine_series <- c(haversine_series, haversine(loc1,loc2))
+}
+df %>% 
+  mutate(df, distance=haversine_series)
+end_time = Sys.time()
+
+print(end_time-start_time)
+```
+```{r}
+#using data table and vectorization with pre-allocated output vector
+start_time = Sys.time()
+distance <- integer(nrow(df))
+dt <- setDT(df)
+for (i in seq_len(nrow(dt))){
+  distance[i] <- haversine(loc1, c(dt[,locLat[i]],dt[,locLong[i]]))
+}
+end_time  = Sys.time()
+print(end_time-start_time)
+```
+```{r}
+#using foreach and parallel
+dt <- setDT(df)
+start_time = Sys.time()
+haversine_series <- foreach(i= 1:nrow(df), .combine='c', .packages=c("pracma")) %dopar% {
+      haversine(c(40.671, -73.985), c(df$locLat[i], df$locLong[i]))
+}
+
+end_time  = Sys.time()
+print(end_time-start_time)
+```
+
